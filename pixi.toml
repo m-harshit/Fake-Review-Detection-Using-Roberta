@@ -1,0 +1,31 @@
+[workspace]
+authors = ["m-harshit <inkoceanblue@gmail.com>"]
+channels = ["conda-forge"]
+name = "engine"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+dev = ".pixi\\envs\\default\\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000"
+torch-check = ".pixi\\envs\\default\\python.exe -c \"import torch; print(torch.__version__); print(torch.cuda.is_available())\""
+
+[activation.env]
+KMP_DUPLICATE_LIB_OK = "TRUE"
+
+[dependencies]
+python = "3.11.*"
+fastapi = ">=0.136.1,<0.137"
+uvicorn = ">=0.46.0,<0.47"
+pandas = ">=3.0.2,<4"
+numpy = ">=2.4.3,<3"
+scikit-learn = ">=1.8.0,<2"
+joblib = ">=1.5.3,<2"
+nltk = ">=3.9.4,<4"
+textblob = ">=0.15.3,<0.16"
+pydantic = ">=2.13.3,<3"
+
+[pypi-dependencies]
+torch = ">=2.10.0, <3"
+transformers = ">=5.7.0, <6"
+safetensors = ">=0.7.0, <0.8"
+tokenizers = ">=0.22.2, <0.23"

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Orange desert planet scene">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c76400"/>
+      <stop offset="0.45" stop-color="#f39705"/>
+      <stop offset="1" stop-color="#ffd14c"/>
+    </linearGradient>
+    <radialGradient id="planet" cx="45%" cy="34%" r="52%">
+      <stop offset="0" stop-color="#ffd66a"/>
+      <stop offset="0.5" stop-color="#f3a51a"/>
+      <stop offset="1" stop-color="#bd5b05"/>
+    </radialGradient>
+    <radialGradient id="moon" cx="45%" cy="42%" r="50%">
+      <stop offset="0" stop-color="#ffe27b"/>
+      <stop offset="1" stop-color="#e98b00"/>
+    </radialGradient>
+    <linearGradient id="dune" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3a0900"/>
+      <stop offset="0.22" stop-color="#7b2600"/>
+      <stop offset="0.5" stop-color="#db7600"/>
+      <stop offset="1" stop-color="#ffc136"/>
+    </linearGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.12"/>
+      </feComponentTransfer>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <circle cx="1035" cy="165" r="430" fill="url(#planet)" opacity="0.56"/>
+  <circle cx="820" cy="365" r="92" fill="url(#moon)" opacity="0.72"/>
+  <path d="M0 642 C160 555 248 678 382 610 C500 552 603 568 728 630 C834 682 947 652 1078 603 C1250 540 1406 684 1600 616 L1600 900 L0 900 Z" fill="#9c4302" opacity="0.42"/>
+  <path d="M0 708 C202 660 286 699 420 642 C590 570 752 488 946 566 C1110 632 1305 682 1600 622 L1600 900 L0 900 Z" fill="#c96200" opacity="0.64"/>
+  <path d="M0 780 C220 726 328 743 492 660 C665 573 867 457 1120 606 C1260 689 1418 744 1600 700 L1600 900 L0 900 Z" fill="url(#dune)"/>
+  <path d="M413 665 C530 610 755 530 1120 606 C880 610 654 666 385 806 C304 849 176 878 0 885 L0 900 L1600 900 L1600 700 C1395 752 1235 694 1120 606 C835 523 610 571 413 665 Z" fill="#260700" opacity="0.72"/>
+  <path d="M552 620 C715 580 876 570 1057 608" fill="none" stroke="#f1a223" stroke-width="5" opacity="0.26"/>
+  <path d="M624 660 C785 612 950 610 1190 688" fill="none" stroke="#ffd05a" stroke-width="4" opacity="0.24"/>
+  <path d="M722 700 C892 655 1048 668 1300 744" fill="none" stroke="#fff0a6" stroke-width="3" opacity="0.19"/>
+  <rect width="1600" height="900" filter="url(#grain)" opacity="0.28"/>
+</svg>
