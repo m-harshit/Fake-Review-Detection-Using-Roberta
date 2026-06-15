@@ -56,7 +56,7 @@ select {
   min-height: 430px;
   background:
     linear-gradient(90deg, rgba(242, 179, 94, 0.94), rgba(216, 124, 62, 0.54) 50%, rgba(168, 67, 36, 0.18)),
-    url("/static/header-desert.svg") center / cover no-repeat;
+    url("header-desert.svg") center / cover no-repeat;
 }
 
 .hero-shell::after {
@@ -772,7 +772,7 @@ button:hover,
 .hero-shell {
   background:
     linear-gradient(90deg, rgba(14, 17, 23, 0.9), rgba(122, 47, 29, 0.44) 54%, rgba(255, 209, 102, 0.1)),
-    url("/static/header-desert.svg") center / cover no-repeat;
+    url("header-desert.svg") center / cover no-repeat;
 }
 
 .hero-shell::after {

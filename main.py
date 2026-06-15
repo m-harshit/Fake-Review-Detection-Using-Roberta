@@ -46,7 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 
 def _preview(text: str, limit: int = 72) -> str:
@@ -68,9 +68,7 @@ class ScraperRequest(BaseModel):
 
 # --- Endpoints ---
 
-@app.get("/")
-async def root():
-    return FileResponse(STATIC_DIR / "index.html")
+
 
 
 @app.get("/firebase-config")
@@ -149,6 +147,8 @@ async def get_product_details(data: ScraperRequest):
     except Exception as e:
         logger.error(f"Scraper Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 # # --- Local Server Execution ---
 # if __name__ == "__main__":
