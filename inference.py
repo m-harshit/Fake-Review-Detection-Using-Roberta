@@ -27,11 +27,14 @@ def run_ensemble_inference(text: str, rating: int, verified: str):
     Coordinates Deep Learning (RoBERTa) and Metadata (Random Forest) 
     to produce a UI-ready ensemble prediction.
     """
+    print("Ensemble inference started.", flush=True)
+
     # 1. Get Expert Instances
     text_expert = get_model_handler()
     meta_expert = get_meta_handler()
     
     # 2. RoBERTa Prediction + Saliency
+    print("Reading the review with RoBERTa.", flush=True)
     text_res = text_expert.predict_and_explain(text)
     
     # Convert prediction to probability of being REAL (Class 1)
@@ -39,6 +42,7 @@ def run_ensemble_inference(text: str, rating: int, verified: str):
         text_prob = text_res['confidence']
     else:
         text_prob = 1 - text_res['confidence']
+    print(f"Text model says real probability is {text_prob:.4f}.", flush=True)
 
     # 3. Metadata Random Forest Prediction
     input_data = {
@@ -46,7 +50,9 @@ def run_ensemble_inference(text: str, rating: int, verified: str):
         "RATING": rating,
         "VERIFIED_PURCHASE": verified
     }
+    print("Checking rating and purchase metadata.", flush=True)
     meta_prob = meta_expert.predict_real_probability(input_data)
+    print(f"Metadata model says real probability is {meta_prob:.4f}.", flush=True)
 
     # 4. Late Fusion Logic
     # Adjust alpha weight based on RoBERTa's certainty (abs distance from 0.5)
@@ -58,6 +64,10 @@ def run_ensemble_inference(text: str, rating: int, verified: str):
     final_confidence = final_real_prob if final_real_prob > 0.5 else 1 - final_real_prob
     fake_probability = 1 - final_real_prob
     grade, trust_level, status = grade_fake_probability(fake_probability)
+    print(
+        f"Final ensemble verdict: {final_label}, grade {grade}, fake probability {fake_probability:.4f}.",
+        flush=True,
+    )
 
     # 5. UI-Ready Response Mapping
     return {
@@ -97,8 +107,8 @@ if __name__ == "__main__":
 
     for text, rating, verified, expected in test_suite:
         res = run_ensemble_inference(text, rating, verified)
-        print(res["full_token_map"])
-        status = "✅" if res['final_label'] == expected else "❌"
+        # print(res["full_token_map"])
+        status = "PASS" if res['final_label'] == expected else "FAIL"
         
         print(f"Result: {res['final_label']} | Conf: {res['final_confidence']:.2%} | {status}")
         print(f"Top Word: {res['top_indicators'][0]['word']} ({res['top_indicators'][0]['score']})")

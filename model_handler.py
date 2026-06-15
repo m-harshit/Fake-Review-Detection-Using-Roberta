@@ -40,6 +40,9 @@ class ModelHandler:
         ).to(self.device)
         
         input_ids = inputs["input_ids"]
+        raw_tokens = self.tokenizer.convert_ids_to_tokens(input_ids[0])
+        printable_tokens = [token.replace('Ġ', '').replace('Ä ', '') for token in raw_tokens]
+        logger.info(f"Model tokens ({len(printable_tokens)}): {printable_tokens}")
         
         # 2. Prepare for Saliency (Gradient Tracking)
         self.model.zero_grad()
@@ -69,7 +72,6 @@ class ModelHandler:
         importance = (importance / (importance.max() + 1e-8)).cpu().detach().numpy()
         
         # 5. Token Cleanup & Mapping
-        raw_tokens = self.tokenizer.convert_ids_to_tokens(input_ids[0])
         highlights = []
         
         for i, token in enumerate(raw_tokens):

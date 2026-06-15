@@ -1,4 +1,4 @@
-const { useMemo, useState } = React;
+const { useEffect, useMemo, useState } = React;
 
 const gradeStyles = {
   A: { trust: "Trustworthy", status: "TRUSTWORTHY", tone: "#7A2F1D" },
@@ -201,7 +201,8 @@ function sampleForMode(mode) {
 const pages = [
   { id: "ensemble-product", title: "Full Analysis" },
   { id: "text-product", title: "Text Analysis" },
-  { id: "manual", title: "Manual Review" }
+  { id: "manual", title: "Manual Review" },
+  { id: "history", title: "History" }
 ];
 
 const detailKeys = [
@@ -316,9 +317,167 @@ async function apiPost(path, payload) {
   return data;
 }
 
-function Header({ page, setPage }) {
+function friendlyAuthError(error) {
+  const code = error?.code || "";
+  if (code.includes("invalid-credential") || code.includes("wrong-password")) return "Email or password is incorrect.";
+  if (code.includes("user-not-found")) return "No account exists for this email.";
+  if (code.includes("email-already-in-use")) return "An account already exists for this email.";
+  if (code.includes("weak-password")) return "Use a stronger password with at least 6 characters.";
+  if (code.includes("invalid-email")) return "Enter a valid email address.";
+  if (code.includes("network-request-failed")) return "Network error. Please try again.";
+  return error?.message || "Something went wrong. Please try again.";
+}
+
+async function initFirebase() {
+  const config = await fetch("/firebase-config").then((res) => res.json());
+  if (!config.apiKey || !window.firebase) return null;
+  if (!firebase.apps.length) firebase.initializeApp(config);
+  return firebase.auth();
+}
+
+function historyKey(user) {
+  return `fake-review-history:${user?.uid || "guest"}`;
+}
+
+function loadHistory(user) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(historyKey(user)) || "[]");
+    const seen = new Set();
+    return stored.filter((item) => {
+      const dedupeId = normalizeHistoryUrl(item.productLink) || item.id;
+      if (seen.has(dedupeId)) return false;
+      seen.add(dedupeId);
+      item.id = dedupeId;
+      item.displayLink = item.displayLink || shortenUrl(item.productLink);
+      return true;
+    });
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(user, history) {
+  localStorage.setItem(historyKey(user), JSON.stringify(history.slice(0, 30)));
+}
+
+function normalizeHistoryUrl(url) {
+  const clean = String(url || "").trim();
+  if (!clean) return "";
+  try {
+    const parsed = new URL(clean);
+    parsed.hash = "";
+    parsed.search = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return clean.replace(/\s+/g, " ");
+  }
+}
+
+function shortenUrl(url, limit = 64) {
+  const clean = normalizeHistoryUrl(url);
+  if (!clean) return "Manual analysis";
+  return clean.length > limit ? `${clean.slice(0, limit - 3)}...` : clean;
+}
+
+function makeHistoryItem({ data, url = "", mode = "ensemble", title = "Manual review" }) {
+  const summary = data.product ? productReviewSummary(data) : null;
+  const productFakeProbability = summary?.averageFakeProbability ?? null;
+  const productPrediction = productFakeProbability === null ? null : productFakeProbability >= 0.5 ? "FAKE" : "REAL";
+  const productConfidence = productFakeProbability === null ? null : productPrediction === "FAKE" ? productFakeProbability : 1 - productFakeProbability;
+  const prediction = data.prediction || productPrediction || "PENDING";
+  const confidence = data.confidence ?? data.final_confidence ?? productConfidence ?? 0;
+  const normalizedUrl = normalizeHistoryUrl(url);
+  return {
+    id: normalizedUrl || crypto.randomUUID(),
+    productName: data.product?.title || title,
+    productLink: normalizedUrl,
+    displayLink: shortenUrl(normalizedUrl),
+    prediction,
+    confidence,
+    analyzedAt: new Date().toISOString(),
+    mode,
+    data
+  };
+}
+
+function AuthScreen({ auth, onAuthed }) {
+  const [mode, setMode] = useState("login");
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const isSignup = mode === "signup";
+  const isForgot = mode === "forgot";
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!auth) {
+      setMessage("Firebase config is missing. Check the VITE_FIREBASE values in .env.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+    try {
+      if (isForgot) {
+        await auth.sendPasswordResetEmail(form.email);
+        setMessage("Password reset email sent. Please check your inbox.");
+      } else if (isSignup) {
+        const result = await auth.createUserWithEmailAndPassword(form.email, form.password);
+        if (form.name) await result.user.updateProfile({ displayName: form.name });
+        onAuthed(result.user);
+      } else {
+        const result = await auth.signInWithEmailAndPassword(form.email, form.password);
+        onAuthed(result.user);
+      }
+    } catch (error) {
+      setMessage(friendlyAuthError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <span className="eyebrow">Fake review detection</span>
+        <h1>{isForgot ? "Reset password" : isSignup ? "Create account" : "Welcome back"}</h1>
+        <p>Log in to use Amazon review analysis and keep your previous checks in history.</p>
+        <form onSubmit={submit}>
+          {isSignup && (
+            <label>
+              Name
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </label>
+          )}
+          <label>
+            Email
+            <input type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          </label>
+          {!isForgot && (
+            <label>
+              Password
+              <input type="password" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+            </label>
+          )}
+          <button type="submit" disabled={busy}>{busy ? "Please wait" : isForgot ? "Send reset link" : isSignup ? "Sign up" : "Log in"}</button>
+        </form>
+        {message && <p className="auth-message">{message}</p>}
+        <div className="auth-actions">
+          {!isForgot && <button type="button" className="quiet" onClick={() => setMode(isSignup ? "login" : "signup")}>{isSignup ? "Back to login" : "Create account"}</button>}
+          {!isSignup && <button type="button" className="quiet" onClick={() => setMode(isForgot ? "login" : "forgot")}>{isForgot ? "Back to login" : "Forgot password"}</button>}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function Header({ page, setPage, user, onLogout }) {
   return (
     <header className="hero-shell">
+      <button type="button" className="logout-top" onClick={onLogout}>
+        Logout
+        <small>{user?.displayName || user?.email}</small>
+      </button>
       <div>
         <span className="eyebrow">Fake review detection</span>
         <h1 className="dune-title">Amazon Review Analysis Tool</h1>
@@ -342,7 +501,7 @@ function Header({ page, setPage }) {
   );
 }
 
-function UrlPanel({ mode, onResult, status, setStatus }) {
+function UrlPanel({ mode, onResult, onComplete, status, setStatus }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -362,7 +521,9 @@ function UrlPanel({ mode, onResult, status, setStatus }) {
       const endpoint = mode === "ensemble" ? "/predict" : "/text";
       setStatus(mode === "ensemble" ? "Part 2: running ensemble review inference..." : "Part 2: running text-only review inference...");
       const reviews = await analyzeProductReviews(productData.reviews || [], endpoint);
-      onResult({ ...productData, reviews });
+      const completedData = { ...productData, reviews };
+      onResult(completedData);
+      onComplete?.(completedData, url.trim());
       setStatus("Analysis complete.");
     } catch (error) {
       setStatus(error.message);
@@ -513,11 +674,13 @@ function HighlightedTokens({ prediction }) {
 }
 
 function ReviewCard({ review, mode }) {
+  const [showReasons, setShowReasons] = useState(false);
   const prediction = review.prediction;
   const label = getLabel(prediction);
-  const grade = getGrade(prediction);
+  const confidence = getConfidence(prediction);
   const status = getStatus(prediction);
   const topWords = getTopWords(prediction);
+  const grade = getGrade(prediction);
 
   return (
     <article className={`review-card ${label.toLowerCase()} grade-${(grade || "c").toLowerCase()}`}>
@@ -530,23 +693,33 @@ function ReviewCard({ review, mode }) {
             <span>{valueOrDash(review.date)}</span>
           </div>
         </div>
-        <div className={`verdict ${label.toLowerCase()}`}>
+        <div className={`verdict-line ${label.toLowerCase()}`}>
+          <span className="pulse-dot" />
           <strong>{label}</strong>
-          <span>{status}</span>
-          {grade && <b>Grade {grade}</b>}
+          <span>{confidence === null ? status : `${(Number(confidence) * 100).toFixed(1)}% confidence`}</span>
         </div>
       </div>
-      <HighlightedTokens prediction={prediction} />
+      {review.text && <p className="review-text">{review.text}</p>}
       <div className="review-foot">
         <span>By {valueOrDash(review.author)}</span>
         <span>{valueOrDash(review.helpful_votes)}</span>
         <span>{mode === "ensemble" ? "Ensemble inference" : "Text-only inference"}</span>
       </div>
-      {!!topWords.length && (
-        <div className="word-strip">
-          {topWords.slice(0, 5).map((item) => (
-            <span key={item.word}>{item.word} <b>{Number(item.score).toFixed(2)}</b></span>
-          ))}
+      {!!prediction && (
+        <button className="quiet reason-toggle" type="button" onClick={() => setShowReasons(!showReasons)}>
+          {showReasons ? "Hide possible reasons" : "Show possible reasons"}
+        </button>
+      )}
+      {showReasons && (
+        <div className="reason-panel">
+          <HighlightedTokens prediction={prediction} />
+          {!!topWords.length && (
+            <div className="word-strip">
+              {topWords.slice(0, 5).map((item) => (
+                <span key={item.word}>{item.word} <b>{Number(item.score).toFixed(2)}</b></span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </article>
@@ -609,7 +782,7 @@ function ProductDetails({ data }) {
   );
 }
 
-function ProductInferencePage({ mode }) {
+function ProductInferencePage({ mode, onAddHistory }) {
   const [data, setData] = useState(sampleForMode(mode));
   const [status, setStatus] = useState("Sample data loaded.");
   const copy =
@@ -621,11 +794,17 @@ function ProductInferencePage({ mode }) {
     <>
       <section className="workflow-card">
         <div>
-          <span className="eyebrow">{mode === "ensemble" ? "Page 1" : "Page 2"}</span>
+          <span className="eyebrow">{mode === "ensemble" ? "Full analysis" : "Text analysis"}</span>
           <h2>{mode === "ensemble" ? "Product page with ensemble inference" : "Product page with text-only inference"}</h2>
           <p>{copy}</p>
         </div>
-        <UrlPanel mode={mode} onResult={setData} status={status} setStatus={setStatus} />
+        <UrlPanel
+          mode={mode}
+          onResult={setData}
+          onComplete={(completedData, url) => onAddHistory(makeHistoryItem({ data: completedData, url, mode }))}
+          status={status}
+          setStatus={setStatus}
+        />
       </section>
       <ProductHero data={data} />
       <OverallGradeBanner data={data} />
@@ -653,7 +832,7 @@ function StarRatingInput({ value, onChange }) {
   );
 }
 
-function ManualPage() {
+function ManualPage({ onAddHistory }) {
   const [reviewText, setReviewText] = useState("Absolutely loved this product! The quality exceeded my expectations and delivery was super fast.");
   const [rating, setRating] = useState(5);
   const [verified, setVerified] = useState("Y");
@@ -683,6 +862,15 @@ function ManualPage() {
         VERIFIED_PURCHASE: verified
       });
       setResult(data);
+      onAddHistory(makeHistoryItem({
+        data: {
+          prediction: data.final_label,
+          confidence: data.final_confidence,
+          reviews: [{ ...review, prediction: data }]
+        },
+        mode: "manual",
+        title: "Manual review input"
+      }));
       setStatus("Manual review analysis complete.");
     } catch (error) {
       setStatus(error.message);
@@ -693,7 +881,7 @@ function ManualPage() {
     <>
       <section className="manual-layout">
         <form className="manual-form" onSubmit={submit}>
-          <span className="eyebrow">Page 3</span>
+          <span className="eyebrow">Manual review</span>
           <h2>Manual ensemble review check</h2>
           <label>Review text</label>
           <textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} rows="8" />
@@ -730,15 +918,120 @@ function EmptyCard() {
   );
 }
 
+function HistoryPage({ history }) {
+  const [selected, setSelected] = useState(null);
+
+  if (selected) {
+    const reviews = selected.data?.reviews || [];
+    return (
+      <>
+        <section className="workflow-card history-detail-head">
+          <div>
+            <span className="eyebrow">Saved analysis</span>
+            <h2>{selected.productName}</h2>
+            <p>{selected.displayLink || shortenUrl(selected.productLink)} | {new Date(selected.analyzedAt).toLocaleString()}</p>
+          </div>
+          <button type="button" className="quiet" onClick={() => setSelected(null)}>Back to history</button>
+        </section>
+        <div className="history-stats">
+          <Metric label="Prediction" value={selected.prediction} />
+          <Metric label="Confidence" value={selected.confidence ? `${(Number(selected.confidence) * 100).toFixed(1)}%` : "-"} />
+          <Metric label="Model" value={selected.mode === "manual" ? "Manual ensemble" : selected.mode === "text" ? "Text-only" : "Full ensemble"} />
+          <Metric label="Reviews" value={reviews.length || "-"} />
+        </div>
+        <section className="review-zone">
+          <div className="center-reviews">
+            {reviews.length ? reviews.map((review, index) => (
+              <ReviewCard key={review.position || index} review={review} mode={selected.mode === "text" ? "text" : "ensemble"} />
+            )) : <EmptyCard />}
+          </div>
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <section className="workflow-card">
+        <div>
+          <span className="eyebrow">Saved checks</span>
+          <h2>Previous analyses</h2>
+          <p>Reopen earlier product or manual review checks, including prediction statistics and possible reasons.</p>
+        </div>
+      </section>
+      <section className="history-list">
+        {history.length ? history.map((item) => (
+          <article className="review-card history-card" key={item.id}>
+            <div>
+              <h3>{item.productName}</h3>
+              <p className="history-url">{item.displayLink || shortenUrl(item.productLink)}</p>
+            </div>
+            <div className={`verdict-line ${String(item.prediction).toLowerCase()}`}>
+              <span className="pulse-dot" />
+              <strong>{item.prediction}</strong>
+              <span>{item.confidence ? `${(Number(item.confidence) * 100).toFixed(1)}% confidence` : "Saved result"}</span>
+            </div>
+            <div className="review-foot">
+              <span>{new Date(item.analyzedAt).toLocaleString()}</span>
+              <span>{item.mode === "text" ? "Text-only inference" : item.mode === "manual" ? "Manual ensemble" : "Ensemble inference"}</span>
+            </div>
+            <button type="button" onClick={() => setSelected(item)}>Open analysis</button>
+          </article>
+        )) : (
+          <EmptyCard />
+        )}
+      </section>
+    </>
+  );
+}
+
 function App() {
+  const [auth, setAuth] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState(null);
   const [page, setPage] = useState("ensemble-product");
+  const [history, setHistory] = useState([]);
+
+  useEffect(() => {
+    let unsubscribe = null;
+    initFirebase()
+      .then((authClient) => {
+        setAuth(authClient);
+        if (!authClient) {
+          setAuthReady(true);
+          return;
+        }
+        unsubscribe = authClient.onAuthStateChanged((nextUser) => {
+          setUser(nextUser);
+          setAuthReady(true);
+          setHistory(nextUser ? loadHistory(nextUser) : []);
+        });
+      })
+      .catch(() => setAuthReady(true));
+    return () => unsubscribe && unsubscribe();
+  }, []);
+
+  function addHistory(item) {
+    const next = [item, ...history.filter((entry) => entry.id !== item.id)];
+    setHistory(next);
+    saveHistory(user, next);
+  }
+
+  async function logout() {
+    if (auth) await auth.signOut();
+    setPage("ensemble-product");
+  }
+
+  if (!authReady) return <main className="auth-shell"><section className="auth-card"><h1>Loading...</h1></section></main>;
+  if (!user) return <AuthScreen auth={auth} onAuthed={setUser} />;
 
   return (
     <main className="app-shell">
-      <Header page={page} setPage={setPage} />
-      {page === "ensemble-product" && <ProductInferencePage mode="ensemble" />}
-      {page === "text-product" && <ProductInferencePage mode="text" />}
-      {page === "manual" && <ManualPage />}
+      <Header page={page} setPage={setPage} user={user} onLogout={logout} />
+      {page === "ensemble-product" && <ProductInferencePage mode="ensemble" onAddHistory={addHistory} />}
+      {page === "text-product" && <ProductInferencePage mode="text" onAddHistory={addHistory} />}
+      {page === "manual" && <ManualPage onAddHistory={addHistory} />}
+      {page === "history" && <HistoryPage history={history} />}
     </main>
   );
 }

@@ -10,6 +10,8 @@ def predict_text_only(text: str):
     """
     Core function for UI/API to get RoBERTa predictions and token importance.
     """
+    print("Text-only inference started.", flush=True)
+
     # 1. Access the singleton model handler
     text_expert = get_model_handler()
     
@@ -22,6 +24,10 @@ def predict_text_only(text: str):
         else 1 - raw_result["confidence"]
     )
     grade, trust_level, status = grade_fake_probability(fake_probability)
+    print(
+        f"Text-only verdict: {raw_result['prediction']}, grade {grade}, fake probability {fake_probability:.4f}.",
+        flush=True,
+    )
     
     # 3. Format the response for the UI
     # We want a clean list of 'word' and 'score' for easy mapping

@@ -17,8 +17,32 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
+
+def _load_env_file(path: Path) -> None:
+    """Load simple KEY=VALUE pairs from .env without adding another dependency."""
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+_load_env_file(BASE_DIR / ".env")
+
 app = FastAPI(title="Fake Review Detection System")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _preview(text: str, limit: int = 72) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else f"{text[:limit]}..."
 
 # --- Pydantic Models for Input Validation ---
 
@@ -39,14 +63,37 @@ class ScraperRequest(BaseModel):
 async def root():
     return FileResponse(STATIC_DIR / "index.html")
 
+
+@app.get("/firebase-config")
+async def firebase_config():
+    """Expose Firebase browser config from environment variables."""
+    return {
+        "apiKey": os.getenv("VITE_FIREBASE_API_KEY", ""),
+        "authDomain": os.getenv("VITE_FIREBASE_AUTH_DOMAIN", ""),
+        "projectId": os.getenv("VITE_FIREBASE_PROJECT_ID", ""),
+        "storageBucket": os.getenv("VITE_FIREBASE_STORAGE_BUCKET", ""),
+        "messagingSenderId": os.getenv("VITE_FIREBASE_MESSAGING_SENDER_ID", ""),
+        "appId": os.getenv("VITE_FIREBASE_APP_ID", ""),
+        "measurementId": os.getenv("VITE_FIREBASE_MEASUREMENT_ID", ""),
+    }
+
 @app.post("/predict")
 async def predict_ensemble(data: EnsembleRequest):
     """Full Ensemble Prediction (RoBERTa + Random Forest)"""
     try:
+        print(
+            f"Ensemble request received: rating {data.RATING}, verified {data.VERIFIED_PURCHASE}.",
+            flush=True,
+        )
+        print(f"Review preview: {_preview(data.REVIEW_TEXT)}", flush=True)
         result = run_ensemble_inference(
             text=data.REVIEW_TEXT,
             rating=data.RATING,
             verified=data.VERIFIED_PURCHASE
+        )
+        print(
+            f"Ensemble complete: {result['final_label']} with {result['final_confidence']:.2%} confidence.",
+            flush=True,
         )
         return result
     except Exception as e:
@@ -57,7 +104,13 @@ async def predict_ensemble(data: EnsembleRequest):
 async def predict_text(data: TextOnlyRequest):
     """RoBERTa-only Prediction with Saliency (Highlights)"""
     try:
+        print("Text-only request received.", flush=True)
+        print(f"Review preview: {_preview(data.REVIEW_TEXT)}", flush=True)
         result = predict_text_only(data.REVIEW_TEXT)
+        print(
+            f"Text-only complete: {result['prediction']} with {result['confidence']:.2%} confidence.",
+            flush=True,
+        )
         return result
     except Exception as e:
         logger.error(f"Text Prediction Error: {e}")
@@ -71,11 +124,17 @@ async def get_product_details(data: ScraperRequest):
         raise HTTPException(status_code=500, detail="SERPAPI_KEY not found in environment.")
 
     try:
+        print("Product lookup started.", flush=True)
+        print(f"Amazon input: {_preview(data.url)}", flush=True)
         logger.info(f"Scraping URL: {data.url}")
         result = analyse(raw_input=data.url, api_key=my_key)
         
         if not result:
             raise HTTPException(status_code=404, detail="Could not retrieve product data.")
+
+        review_count = len(result.get("reviews", []))
+        title = result.get("product", {}).get("title") or "product"
+        print(f"Product lookup complete: {review_count} reviews found for {_preview(title)}", flush=True)
             
         return result
     except Exception as e:
