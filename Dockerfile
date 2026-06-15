@@ -8,22 +8,25 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only PyTorch and ML dependencies
-# Using the CPU-only PyTorch build keeps the image size small
+# 1. Install CPU-only PyTorch first
+# (Specifying --index-url separately prevents pip from trying to resolve standard packages against the PyTorch registry)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# 2. Install all other ML and web dependencies from standard PyPI
+# (We pin scikit-learn to 1.6.1 to match the metadata RF model's pickling version)
 RUN pip install --no-cache-dir \
-    fastapi==0.111.0 \
-    uvicorn==0.30.1 \
-    pandas==2.2.2 \
-    numpy==1.26.4 \
-    scikit-learn==1.5.0 \
-    joblib==1.4.2 \
-    nltk==3.8.1 \
-    textblob==0.18.0.post0 \
-    pydantic==2.7.4 \
-    torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu \
-    transformers==4.41.2 \
-    safetensors==0.4.3 \
-    tokenizers==0.19.3
+    fastapi \
+    uvicorn \
+    pandas \
+    numpy \
+    scikit-learn==1.6.1 \
+    joblib \
+    nltk \
+    textblob \
+    pydantic \
+    transformers \
+    safetensors \
+    tokenizers
 
 # Copy the rest of the application code
 COPY . .
