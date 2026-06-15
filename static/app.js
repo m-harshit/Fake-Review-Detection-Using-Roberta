@@ -1,5 +1,9 @@
 const { useEffect, useMemo, useState } = React;
 
+const API_BASE_URL = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+  ? ""
+  : "https://thecranesareflying-amazon-review-detection.hf.space";
+
 const gradeStyles = {
   A: { trust: "Trustworthy", status: "TRUSTWORTHY", tone: "#7A2F1D" },
   B: { trust: "Good", status: "TRUSTWORTHY", tone: "#A84324" },
@@ -307,7 +311,7 @@ function productReviewSummary(data) {
 }
 
 async function apiPost(path, payload) {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -329,7 +333,7 @@ function friendlyAuthError(error) {
 }
 
 async function initFirebase() {
-  const config = await fetch("/firebase-config").then((res) => res.json());
+  const config = await fetch(`${API_BASE_URL}/firebase-config`).then((res) => res.json());
   if (!config.apiKey || !window.firebase) return null;
   if (!firebase.apps.length) firebase.initializeApp(config);
   return firebase.auth();
